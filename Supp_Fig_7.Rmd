@@ -1,0 +1,323 @@
+---
+title: "Evidence for conserved long UTR lengths in Casein Kinase I transcripts; code used in Kelliher et al 2020 Supplementary Figure 7"
+author: "Tina Kelliher"
+date: "12/2/2020"
+output: html_document
+---
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+## install.packages("stringr")
+## install stringR into your session if you have not previously done so
+
+library(stringr)
+
+library(googledrive)
+
+```
+
+## Setup: download genome annotation files locally
+
+To run this R script locally, you will need access to the *Neurospora crassa*, *Drosophila melanogaster*, *Mus musculus*, and *Homo sapiens* genome annotation files.
+
+Genome annotations can be found in my Dartmouth Google Drive, publically shared sub-directory: "Kelliher_et_al_2020".
+
+To download the files, you can either:
+
+1) run the following chunk of R code, OR
+
+2) download manually from: "https://drive.google.com/drive/folders/1UstcHGa-OtXbxirDOI7IhcM4VZXz9ENH?usp=sharing". Create a folder called "input_data" in the same directory as this markdown file "Supp_Fig_7.Rmd" on your file system. Move the 4 downloaded genome annotation files into this folder called "input_data".
+
+```{r}
+
+## install.packages("googledrive")
+## install GoogleDrive into your session if you have not previously done so
+
+data_url <- "https://drive.google.com/drive/folders/1UstcHGa-OtXbxirDOI7IhcM4VZXz9ENH?usp=sharing"
+
+folder <- drive_get(as_id(data_url))
+## if running googledrive synatax for the first time, you will need to grant the Tidyverse API Packages access to your Google Account
+## if you select "no access", this step will generate: Permission Error 403
+## to check directory contents, use: drive_ls(data_url)
+
+drive_download(as_id("1gfco5VudAazoRoKFEsh8-P2aLrejzGG5"), path="./input_data/FungiDB-45_NcrassaOR74A_rmSpaces.gff")
+
+drive_download(as_id("1SxlUS1xrXH5GaH8QEsZKLPUdL9SH-Rfh"), path="./input_data/D_melanogaster_Ensembl_BDGP6_genes.gtf")
+
+drive_download(as_id("1p7pbYWpECDK-nNeWDXyULfBk1iIfWdQy"), path="./input_data/M_musculus_Ensembl_GRCm38_genes.gtf")
+
+drive_download(as_id("1lPvAXHBpFZV79rqUAcbB7EfFelzizxlX"), path="./input_data/H_sapiens_Ensembl_GRCh37_genes.gtf")
+
+```
+
+## Figure A) *Neurospora crassa*
+
+Gene annotation files downloaded from FungiDB version 45: https://fungidb.org/common/downloads/release-45/NcrassaOR74A/
+
+Accessed: 10/25/2019 by CMK
+
+Modifications to raw file: using TextWrangler, spaces were replaced with underscores using Find and Replace (i.e. " " to "_"; 38,187 replacements)
+
+```{r}
+
+gff <- as.data.frame(read.table("./input_data/FungiDB-45_NcrassaOR74A_rmSpaces.gff", stringsAsFactors=FALSE))
+
+```
+
+```{r, fig.width=7, fig.height=5.5}
+
+gff_UTRs <- gff[which(gff$V3=="three_prime_UTR"),]
+gff_sub <- cbind(gff_UTRs[,4], gff_UTRs[,5], gff_UTRs[,9])
+gff_sub <- data.frame(gff_sub, stringsAsFactors=FALSE)
+names(gff_sub) <- c("start", "end", "gene_info")
+labels <- str_extract(gff_sub$gene_info, paste("Parent=NCU", "[0-9]{5}", sep=""))
+labels_sub <- sub("Parent=", "", labels)
+gff_sub_v2 <- cbind(labels_sub, gff_sub[1:2])
+gff_sub_v2 <- data.frame(gff_sub_v2, stringsAsFactors=FALSE)
+names(gff_sub_v2) <- c("gene_UTR", "start", "end")
+UTR_length <- as.numeric(gff_sub_v2$end) - as.numeric(gff_sub_v2$start)
+gff_sub_v3 <- cbind(gff_sub_v2, UTR_length)
+gff_sub_v3 <- data.frame(gff_sub_v3, stringsAsFactors=FALSE)
+names(gff_sub_v3) <- c("gene_UTR", "start", "end", "length_UTR")
+gff_sub_v3 <- gff_sub_v3[order(as.numeric(gff_sub_v3$length_UTR), decreasing=TRUE),]
+gff_sub_v4 <- gff_sub_v3[!duplicated(gff_sub_v3$gene_UTR),]
+## keep only the longest 3' UTR recorded for each unique gene ID
+UTR_length_logs <- log(as.numeric(gff_sub_v4$length_UTR), 2)
+gff_sub_v5 <- cbind(gff_sub_v4, UTR_length_logs)
+gff_sub_v5 <- data.frame(gff_sub_v5, stringsAsFactors=FALSE)
+names(gff_sub_v5) <- c("gene_UTR", "start", "end", "length_UTR", "log2_length_UTR")
+## write.table(gff_sub_v5, "./N_crassa_FungiDB45_7793_longest_UTRs.txt", quote=F, row.names=F, sep="\t")
+## un-comment the above line to save the UTR annotation output
+rm(gff)
+rm(gff_UTRs)
+rm(gff_sub)
+rm(gff_sub_v2)
+rm(gff_sub_v3)
+rm(gff_sub_v4)
+## clear the worspace memory for the next organism
+
+ck1 <- "NCU00685"
+## ck-1a: https://fungidb.org/fungidb/app/record/gene/NCU00685
+ck1_idx <- as.numeric(which(gff_sub_v5$gene_UTR==ck1))
+perc <- ck1_idx / nrow(gff_sub_v5) * 100
+print(paste("N. crassa CK1 longest 3' UTR is in the top: ", round(perc, 3), "%", sep=""))
+print(paste("Number of annotated N. crassa UTRs: ", round(nrow(gff_sub_v5), 3), sep=""))
+print(paste("Length of CK1 UTR: ", round(gff_sub_v5[ck1_idx,4], 3), " bps", sep=""))
+ck1_UTR <- as.numeric(gff_sub_v5[ck1_idx,5])
+
+bins <- seq(0, 14, by=0.25)
+hist(gff_sub_v5$log2_length_UTR, breaks=bins, ylab="Frequency", xlab="log2 (UTR lengths)", main="histogram for Neurospora", col="gray75", xlim=c(4,12))
+points(x=ck1_UTR, y=200, pch=16, col="red") ## ck-1a
+
+## Exported figure as SVG (700w x 550h) for Inkscape
+
+```
+
+## Figure B) *Drosophila melanogaster*
+
+Gene annotation files downloaded from Illumina iGenomes: https://support.illumina.com/sequencing/sequencing_software/igenome.html
+
+Accessed: 8/5/2020 by CMK
+
+```{r}
+
+gff_fly <- as.data.frame(read.table("./input_data/D_melanogaster_Ensembl_BDGP6_genes.gtf", sep="\t", stringsAsFactors=FALSE))
+
+```
+
+
+```{r, fig.width=7, fig.height=5.5}
+
+gff_fly_UTRs <- gff_fly[which(gff_fly$V3=="UTR"),]
+gff_fly_sub <- cbind(gff_fly_UTRs[,4], gff_fly_UTRs[,5], gff_fly_UTRs[,9])
+gff_fly_sub <- data.frame(gff_fly_sub, stringsAsFactors=FALSE)
+names(gff_fly_sub) <- c("start", "end", "gene_info")
+labels_fly <- str_extract(gff_fly_sub$gene_info, paste("gene_id FBgn", "[0-9]{7}", sep=""))
+labels_fly_sub <- sub("gene_id ", "", labels_fly)
+gff_fly_sub_v2 <- cbind(labels_fly_sub, gff_fly_sub[1:2])
+gff_fly_sub_v2 <- data.frame(gff_fly_sub_v2, stringsAsFactors=FALSE)
+names(gff_fly_sub_v2) <- c("gene_UTR", "start", "end")
+UTR_length_fly <- as.numeric(gff_fly_sub_v2$end) - as.numeric(gff_fly_sub_v2$start)
+gff_fly_sub_v3 <- cbind(gff_fly_sub_v2, UTR_length_fly)
+gff_fly_sub_v3 <- data.frame(gff_fly_sub_v3, stringsAsFactors=FALSE)
+names(gff_fly_sub_v3) <- c("gene_UTR", "start", "end", "length_UTR")
+gff_fly_sub_v3 <- gff_fly_sub_v3[order(as.numeric(gff_fly_sub_v3$length_UTR), decreasing=TRUE),]
+gff_fly_sub_v4 <- gff_fly_sub_v3[!duplicated(gff_fly_sub_v3$gene_UTR),]
+## keep only the longest UTR recorded for each unique gene ID
+UTR_length_logs <- log(as.numeric(gff_fly_sub_v4$length_UTR), 2)
+gff_fly_sub_v5 <- cbind(gff_fly_sub_v4, UTR_length_logs)
+gff_fly_sub_v5 <- data.frame(gff_fly_sub_v5, stringsAsFactors=FALSE)
+names(gff_fly_sub_v5) <- c("gene_UTR", "start", "end", "length_UTR", "log2_length_UTR")
+## write.table(gff_fly_sub_v5, "./D_melanogaster_Ensembl_BDGP6_13552_longest_UTRs.txt", quote=F, row.names=F, sep="\t")
+## un-comment the above line to save the UTR annotation output
+rm(gff_fly)
+rm(gff_fly_UTRs)
+rm(gff_fly_sub)
+rm(gff_fly_sub_v2)
+rm(gff_fly_sub_v3)
+rm(gff_fly_sub_v4)
+## clear the worspace memory for the next organism
+
+ck1 <- "FBgn0002413"
+## DBT: https://flybase.org/reports/FBgn0002413
+ck1_idx <- as.numeric(which(gff_fly_sub_v5$gene_UTR==ck1))
+perc <- ck1_idx / nrow(gff_fly_sub_v5) * 100
+print(paste("Fly CK1 longest UTR is in the top: ", round(perc, 3), "%", sep=""))
+print(paste("Number of annotated fly UTRs: ", round(nrow(gff_fly_sub_v5), 3), sep=""))
+print(paste("Length of CK1 UTR: ", round(gff_fly_sub_v5[ck1_idx,4], 3), " bps", sep=""))
+ck1_UTR <- as.numeric(gff_fly_sub_v5[ck1_idx,5])
+
+bins <- seq(0, 15, by=0.5)
+hist(gff_fly_sub_v5$log2_length_UTR, breaks=bins, ylab="Frequency", xlab="log2 (UTR lengths)", main="histogram for Drosophila", col="gray75", xlim=c(3,15))
+points(x=ck1_UTR, y=200, pch=16, col="red") ## DBT
+
+## Exported figure as SVG (700w x 550h) for Inkscape
+
+```
+
+## Figure C) *Mus musculus*
+
+Gene annotation files downloaded from Illumina iGenomes: https://support.illumina.com/sequencing/sequencing_software/igenome.html
+
+Accessed: 8/5/2020 by CMK
+
+```{r}
+
+gff_m <- as.data.frame(read.table("./input_data/M_musculus_Ensembl_GRCm38_genes.gtf", sep="\t", stringsAsFactors=FALSE))
+
+```
+
+
+```{r, fig.width=7, fig.height=5.5}
+
+gff_m_UTRs <- gff_m[which(gff_m$V3=="UTR"),]
+gff_m_sub <- cbind(gff_m_UTRs[,4], gff_m_UTRs[,5], gff_m_UTRs[,9])
+gff_m_sub <- data.frame(gff_m_sub, stringsAsFactors=FALSE)
+names(gff_m_sub) <- c("start", "end", "gene_info")
+labels_m <- str_extract(gff_m_sub$gene_info, paste("gene_id ENSMUSG", "[0-9]{11}", sep=""))
+labels_m_sub <- sub("gene_id ", "", labels_m)
+gff_m_sub_v2 <- cbind(labels_m_sub, gff_m_sub[1:2])
+gff_m_sub_v2 <- data.frame(gff_m_sub_v2, stringsAsFactors=FALSE)
+names(gff_m_sub_v2) <- c("gene_UTR", "start", "end")
+UTR_length_m <- as.numeric(gff_m_sub_v2$end) - as.numeric(gff_m_sub_v2$start)
+gff_m_sub_v3 <- cbind(gff_m_sub_v2, UTR_length_m)
+gff_m_sub_v3 <- data.frame(gff_m_sub_v3, stringsAsFactors=FALSE)
+names(gff_m_sub_v3) <- c("gene_UTR", "start", "end", "length_UTR")
+gff_m_sub_v3 <- gff_m_sub_v3[order(as.numeric(gff_m_sub_v3$length_UTR), decreasing=TRUE),]
+gff_m_sub_v4 <- gff_m_sub_v3[!duplicated(gff_m_sub_v3$gene_UTR),]
+## keep only the longest UTR recorded for each unique gene ID
+UTR_length_logs_m <- log(as.numeric(gff_m_sub_v4$length_UTR), 2)
+gff_m_sub_v5 <- cbind(gff_m_sub_v4, UTR_length_logs_m)
+gff_m_sub_v5 <- data.frame(gff_m_sub_v5, stringsAsFactors=FALSE)
+names(gff_m_sub_v5) <- c("gene_UTR", "start", "end", "length_UTR", "log2_length_UTR")
+## write.table(gff_m_sub_v5, "./M_musculus_Ensembl_GRCm38_20477_longest_UTRs.txt", quote=F, row.names=F, sep="\t")
+## un-comment the above line to save the UTR annotation output
+rm(gff_m)
+rm(gff_m_UTRs)
+rm(gff_m_sub)
+rm(gff_m_sub_v2)
+rm(gff_m_sub_v3)
+rm(gff_m_sub_v4)
+## clear the worspace memory for the next organism
+
+ck1d <- "ENSMUSG00000025162"
+## Csnk1d: http://www.informatics.jax.org/marker/MGI:1355272
+ck1e <- "ENSMUSG00000022433"
+## Csnk1e: http://www.informatics.jax.org/marker/MGI:1351660
+
+ck1d_idx <- as.numeric(which(gff_m_sub_v5$gene_UTR==ck1d))
+perc <- ck1d_idx / nrow(gff_m_sub_v5) * 100
+print(paste("Mouse CK1delta longest UTR is in the top: ", round(perc, 3), "%", sep=""))
+ck1d_UTR <- as.numeric(gff_m_sub_v5[ck1d_idx,5])
+
+ck1e_idx <- as.numeric(which(gff_m_sub_v5$gene_UTR==ck1e))
+perce <- ck1e_idx / nrow(gff_m_sub_v5) * 100
+print(paste("Mouse CK1epsilon longest UTR is in the top: ", round(perce, 3), "%", sep=""))
+ck1e_UTR <- as.numeric(gff_m_sub_v5[ck1e_idx,5])
+
+print(paste("Number of annotated mouse UTRs: ", round(nrow(gff_m_sub_v5), 3), sep=""))
+print(paste("Length of CK1d UTR: ", round(gff_m_sub_v5[ck1d_idx,4], 3), " bps", sep=""))
+print(paste("Length of CK1e UTR: ", round(gff_m_sub_v5[ck1e_idx,4], 3), " bps", sep=""))
+
+bins <- seq(0, 16, by=0.5)
+hist(gff_m_sub_v5$log2_length_UTR, breaks=bins, ylab="Frequency", xlab="log2 (UTR lengths)", main="histogram for Mouse", col="gray75", xlim=c(3,15))
+points(x=ck1d_UTR, y=200, pch=16, col="red") ## CK1delta
+points(x=ck1e_UTR, y=200, pch=16, col="blue") ## CK1epsilon
+
+## Exported figure as SVG (700w x 550h) for Inkscape
+
+```
+
+## Figure D) *Homo sapiens*
+
+Gene annotation files downloaded from Illumina iGenomes: https://support.illumina.com/sequencing/sequencing_software/igenome.html
+
+Accessed: 8/5/2020 by CMK
+
+```{r}
+
+gff_h <- as.data.frame(read.table("./input_data/H_sapiens_Ensembl_GRCh37_genes.gtf", sep="\t", stringsAsFactors=FALSE))
+
+```
+
+
+```{r, fig.width=7, fig.height=5.5}
+
+gff_h_UTRs <- gff_h[which(gff_h$V3=="UTR"),]
+gff_h_sub <- cbind(gff_h_UTRs[,4], gff_h_UTRs[,5], gff_h_UTRs[,9])
+gff_h_sub <- data.frame(gff_h_sub, stringsAsFactors=FALSE)
+names(gff_h_sub) <- c("start", "end", "gene_info")
+labels_h <- str_extract(gff_h_sub$gene_info, paste("gene_id ENSG", "[0-9]{11}", sep=""))
+labels_h_sub <- sub("gene_id ", "", labels_h)
+gff_h_sub_v2 <- cbind(labels_h_sub, gff_h_sub[1:2])
+gff_h_sub_v2 <- data.frame(gff_h_sub_v2, stringsAsFactors=FALSE)
+names(gff_h_sub_v2) <- c("gene_UTR", "start", "end")
+UTR_length_h <- as.numeric(gff_h_sub_v2$end) - as.numeric(gff_h_sub_v2$start)
+gff_h_sub_v3 <- cbind(gff_h_sub_v2, UTR_length_h)
+gff_h_sub_v3 <- data.frame(gff_h_sub_v3, stringsAsFactors=FALSE)
+names(gff_h_sub_v3) <- c("gene_UTR", "start", "end", "length_UTR")
+gff_h_sub_v3 <- gff_h_sub_v3[order(as.numeric(gff_h_sub_v3$length_UTR), decreasing=TRUE),]
+gff_h_sub_v4 <- gff_h_sub_v3[!duplicated(gff_h_sub_v3$gene_UTR),]
+## keep only the longest UTR recorded for each unique gene ID
+UTR_length_logs_h <- log(as.numeric(gff_h_sub_v4$length_UTR), 2)
+gff_h_sub_v5 <- cbind(gff_h_sub_v4, UTR_length_logs_h)
+gff_h_sub_v5 <- data.frame(gff_h_sub_v5, stringsAsFactors=FALSE)
+names(gff_h_sub_v5) <- c("gene_UTR", "start", "end", "length_UTR", "log2_length_UTR")
+## write.table(gff_h_sub_v5, "./H_sapiens_Ensembl_GRCh37_22401_longest_UTRs.txt", quote=F, row.names=F, sep="\t")
+## un-comment the above line to save the UTR annotation output
+rm(gff_h)
+rm(gff_h_UTRs)
+rm(gff_h_sub)
+rm(gff_h_sub_v2)
+rm(gff_h_sub_v3)
+rm(gff_h_sub_v4)
+## clear the worspace memory for the next organism
+
+ck1d <- "ENSG00000141551"
+## Csnk1d: https://www.ncbi.nlm.nih.gov/gene/1453
+ck1e <- "ENSG00000213923"
+## Csnk1e: https://www.ncbi.nlm.nih.gov/gene/1454
+
+ck1d_idx <- as.numeric(which(gff_h_sub_v5$gene_UTR==ck1d))
+perc <- ck1d_idx / nrow(gff_h_sub_v5) * 100
+print(paste("Human CK1delta longest UTR is in the top: ", round(perc, 3), "%", sep=""))
+ck1d_UTR <- as.numeric(gff_h_sub_v5[ck1d_idx,5])
+
+ck1e_idx <- as.numeric(which(gff_h_sub_v5$gene_UTR==ck1e))
+perce <- ck1e_idx / nrow(gff_h_sub_v5) * 100
+print(paste("Human CK1epsilon longest UTR is in the top: ", round(perce, 3), "%", sep=""))
+ck1e_UTR <- as.numeric(gff_h_sub_v5[ck1e_idx,5])
+
+print(paste("Number of annotated human UTRs: ", round(nrow(gff_h_sub_v5), 3), sep=""))
+print(paste("Length of CK1d UTR: ", round(gff_h_sub_v5[ck1d_idx,4], 3), " bps", sep=""))
+print(paste("Length of CK1e UTR: ", round(gff_h_sub_v5[ck1e_idx,4], 3), " bps", sep=""))
+
+bins <- seq(0, 15, by=0.5)
+hist(gff_h_sub_v5$log2_length_UTR, breaks=bins, ylab="Frequency", xlab="log2 (UTR lengths)", main="histogram for Human", col="gray75", xlim=c(3,15))
+points(x=ck1d_UTR, y=200, pch=16, col="red") ## CK1delta
+points(x=ck1e_UTR, y=200, pch=16, col="blue") ## CK1epsilon
+
+## Exported figure as SVG (700w x 550h) for Inkscape
+
+```
